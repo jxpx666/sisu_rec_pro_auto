@@ -1,0 +1,84 @@
+#!/bin/bash
+
+## sisu_rec_pro
+
+folder="$HOME/Músicas/interface-umc22"
+basename="umc22"
+data=$(date +%Y%m%d-%H%M%S)
+
+mkdir -p "$folder"
+
+take=1
+
+CAPTURA=$(arecord -l | awk '
+/USB/ {
+gsub(":","",$2)
+gsub(":","",$8)
+print "hw:"$2","$8
+exit
+}')
+
+if [ -z "$CAPTURA" ]; then
+    echo "UMC22 não encontrada"
+    exit 1
+fi
+
+start_time=$(date +%s)
+
+status() {
+while true; do
+
+now=$(date +%s)
+s=$((now-start_time))
+
+file="$folder/${basename}_${data}_take$(printf "%02d" $take).wav"
+
+if [ -f "$file" ]; then
+size=$(du -h "$file" | cut -f1)
+else
+size="0"
+fi
+
+printf "\rDATA %s | TEMPO %02d:%02d:%02d | SIZE %s | TAKE %02d" \
+"$data" $((s/3600)) $((s/60%60)) $((s%60)) "$size" "$take"
+
+sleep 1
+
+done
+}
+
+status &
+STATUS_PID=$!
+
+echo
+echo "ENTER = novo take"
+echo "CTRL+C = parar"
+echo
+
+while true; do
+
+file="$folder/${basename}_${data}_take$(printf "%02d" $take).wav"
+
+arecord \
+-D "$CAPTURA" \
+-f S16_LE \
+-r 48000 \
+-c 2 \
+-V stereo \
+-v \
+-B 500000 \
+"$file" &
+
+REC_PID=$!
+
+read
+
+kill $REC_PID 2>/dev/null
+wait $REC_PID 2>/dev/null
+
+echo
+echo "Take $take salvo → $file"
+
+((take++))
+
+done
